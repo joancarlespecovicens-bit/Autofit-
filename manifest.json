@@ -1,9 +1,14 @@
 {
   "short_name": "AutoFit",
-  "name": "AutoFit AI Gym Tracker",
+  "name": "AutoFit Pro - Workout Tracker",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2964/2964514.png",
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
       "type": "image/png",
       "sizes": "512x512"
     }
@@ -11,5 +16,6 @@
   "start_url": ".",
   "background_color": "#090d16",
   "theme_color": "#090d16",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait"
 }
