@@ -1,0 +1,97 @@
+import OpenAI from "openai";
+
+const openai = new OpenAI();
+
+export interface ParsedSet {
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  setType: "NORMAL" | "SUPERSET" | "COMPOUND" | "GIANT" | "DROP_SET" | "REST_PAUSE" | "CLUSTER" | "AMRAP" | "FAILURE";
+  groupLabel?: string;
+  subOrder?: number;
+  rir?: number;
+}
+
+export interface ParsedWorkoutResponse {
+  workoutTitle?: string;
+  workoutDate?: string;
+  sets: ParsedSet[];
+}
+
+export async function parseWorkoutFromImageOrText(
+  input: { base64Image?: string; textQuery?: string }
+): Promise<ParsedWorkoutResponse> {
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: `Eres un experto en entrenamiento de fuerza y OCR deportivo.
+Tu tarea es convertir notas manuscritas, capturas de pantalla o texto rápido de un usuario en un objeto estructurado.
+
+REGLAS DE TRADUCCIÓN DE ABREVIATURAS:
+- PB / Press banca -> Press Banca
+- PI / Press inclinado -> Press Inclinado
+- Jalón / PM -> Jalón al pecho / Peso Muerto
+- RDL -> Peso Muerto Rumano
+
+DETECCIÓN DE BLOQUES ESPECIALES:
+- Si ves flechas hacia abajo (↓) o reducciones de peso sin descanso entre repeticiones de un mismo ejercicio, márcalo como "DROP_SET".
+- Si ves ejercicios agrupados como A1/A2 o unidos entre sí, asígnales el mismo "groupLabel" (ej. "SUPERSET A") y asigna tipo "SUPERSET" o "COMPOUND".
+- Para anotaciones estilo "AMRAP" o "al fallo", marca "AMRAP" o "FAILURE" con rir=0.`
+    }
+  ];
+
+  if (input.base64Image) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: "Procesa esta imagen de entrenamiento y extrae los datos." },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${input.base64Image}` } }
+      ]
+    });
+  } else if (input.textQuery) {
+    messages.push({
+      role: "user",
+      content: `Estructura la siguiente nota de entrenamiento: "${input.textQuery}"`
+    });
+  }
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "workout_parser",
+        schema: {
+          type: "object",
+          properties: {
+            workoutTitle: { type: "string" },
+            workoutDate: { type: "string" },
+            sets: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  exerciseName: { type: "string" },
+                  weight: { type: "number" },
+                  reps: { type: "integer" },
+                  setType: {
+                    type: "string",
+                    enum: ["NORMAL", "SUPERSET", "COMPOUND", "GIANT", "DROP_SET", "REST_PAUSE", "CLUSTER", "AMRAP", "FAILURE"]
+                  },
+                  groupLabel: { type: "string" },
+                  subOrder: { type: "integer" },
+                  rir: { type: "number" }
+                },
+                required: ["exerciseName", "weight", "reps", "setType"]
+              }
+            }
+          },
+          required: ["sets"]
+        }
+      }
+    }
+  });
+
+  return JSON.parse(response.choices[0].message.content || "{}");
+}
