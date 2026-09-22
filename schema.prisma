@@ -1,0 +1,180 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Goal {
+  MUSCLE_GAIN
+  FAT_LOSS
+  STRENGTH
+  PERFORMANCE
+  MAINTENANCE
+}
+
+enum SetType {
+  NORMAL
+  SUPERSET
+  COMPOUND
+  GIANT
+  DROP_SET
+  REST_PAUSE
+  CLUSTER
+  AMRAP
+  FAILURE
+}
+
+enum PRType {
+  MAX_WEIGHT
+  MAX_REPS
+  MAX_VOLUME_SESSION
+  MAX_ESTIMATED_1RM
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  name             String?
+  weight           Float?            // kg
+  height           Float?            // cm
+  goal             Goal              @default(MUSCLE_GAIN)
+  createdAt        DateTime          @default(now())
+
+  workoutPrograms  WorkoutProgram[]
+  workoutSessions  WorkoutSession[]
+  bodyWeightLogs   BodyWeightLog[]
+  personalRecords  PersonalRecord[]
+  customExercises  Exercise[]
+}
+
+model MuscleGroup {
+  id         String     @id @default(uuid())
+  name       String     @unique // Pecho, Espalda, Pierna, Hombro, Bíceps, Tríceps, etc.
+  exercises  Exercise[]
+}
+
+model Exercise {
+  id            String            @id @default(uuid())
+  name          String
+  muscleGroupId String
+  muscleGroup   MuscleGroup       @relation(fields: [muscleGroupId], references: [id])
+  isCustom      Boolean           @default(false)
+  createdById   String?
+  createdBy     User?             @relation(fields: [createdById], references: [id])
+  aliases       String[]          // Ej: ["PB", "Bench Press", "Press Horizontal"]
+
+  programExercises ProgramExercise[]
+  workoutSets      WorkoutSet[]
+  personalRecords  PersonalRecord[]
+}
+
+model WorkoutProgram {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String       // Ej: "Fuerza 3 días"
+  description String?
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  days        WorkoutDay[]
+}
+
+model WorkoutDay {
+  id          String            @id @default(uuid())
+  programId   String
+  program     WorkoutProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title       String            // Ej: "Día 1 - Pecho + Tríceps"
+  order       Int
+  
+  exercises   ProgramExercise[]
+  sessions    WorkoutSession[]
+}
+
+model ProgramExercise {
+  id           String      @id @default(uuid())
+  workoutDayId String
+  workoutDay   WorkoutDay  @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise    @relation(fields: [exerciseId], references: [id])
+  order        Int
+  targetSets   Int         @default(3)
+  targetReps   String      // Ej: "6-8"
+  targetWeight Float?
+  targetRest   Int?        // segundos
+  targetRir    Float?
+  notes        String?
+}
+
+model WorkoutSession {
+  id           String       @id @default(uuid())
+  userId       String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutDayId String?
+  workoutDay   WorkoutDay?  @relation(fields: [workoutDayId], references: [id])
+  title        String       // Ej: "Fuerza A - Pecho + Tríceps"
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
+  durationMin  Int?
+  notes        String?
+  imageUrl     String?
+
+  setGroups    SetGroup[]
+}
+
+model SetGroup {
+  id                   String         @id @default(uuid())
+  workoutSessionId     String
+  workoutSession       WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  type                 SetType        @default(NORMAL)
+  groupOrder           Int            // Orden del bloque en la sesión
+  label                String?        // Ej: "SUPERSET A", "GIANT SET HOMBRO"
+  rounds               Int            @default(1)
+  restBetweenRoundsInt Int?           // segundos
+
+  sets                 WorkoutSet[]
+}
+
+model WorkoutSet {
+  id             String      @id @default(uuid())
+  setGroupId     String
+  setGroup       SetGroup    @relation(fields: [setGroupId], references: [id], onDelete: Cascade)
+  exerciseId     String
+  exercise       Exercise    @relation(fields: [exerciseId], references: [id])
+  
+  order          Int         // Orden dentro del SetGroup (Ej: A1 = 1, A2 = 2)
+  subOrder       Int         @default(1) // Para DropSets / Clusters (Sub-bloques dentro de la misma serie)
+  
+  weight         Float       // kg
+  reps           Int
+  isFailure      Boolean     @default(false)
+  rir            Float?
+  rpe            Float?
+  tempo          String?     // Ej: "3-1-1-0"
+  restSeconds    Int?
+  estimatedOneRm Float       // W * (1 + R/30)
+  completedAt    DateTime    @default(now())
+}
+
+model PersonalRecord {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  type       PRType
+  value      Float    // Peso, Reps, Volumen o 1RM
+  reps       Int?     // Peso relativo a N repeticiones
+  date       DateTime @default(now())
+}
+
+model BodyWeightLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weight    Float    // kg
+  date      DateTime @default(now())
+}
